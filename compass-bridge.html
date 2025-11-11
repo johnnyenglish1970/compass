@@ -1,109 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Compass Bridge</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #0f0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
       text-align: center;
-      padding: 20px;
-      background: #f8f9fa;
-      color: #333;
     }
-    button {
-      background: #0057B8;
-      color: #fff;
-      border: none;
-      padding: 12px 24px;
+    h2 { color: #fff; margin-bottom: 0.5em; }
+    p { color: #aaa; margin: 0.5em 0; }
+    .status {
+      background: #222;
       border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 20px;
-    }
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-    #debug {
-      margin-top: 16px;
+      padding: 10px 16px;
+      color: #0f0;
       font-family: monospace;
-      font-size: 14px;
-      color: #444;
+      width: 90%;
+      max-width: 400px;
       text-align: left;
-      white-space: pre-line;
     }
   </style>
 </head>
 <body>
-  <h2>📱 Compass Bridge</h2>
-  <p>This page enables device compass access (for iOS and Android).</p>
-  <button id="enableBtn">Enable Compass</button>
-  <div id="debug">Waiting for user permission…</div>
+  <h2>🧭 Compass Bridge Active</h2>
+  <p>Listening for device orientation...</p>
+  <div id="status" class="status">Awaiting events...</div>
 
   <script>
-    const btn = document.getElementById('enableBtn');
-    const debug = document.getElementById('debug');
-
-    let lastHeading = null;
+    const statusBox = document.getElementById('status');
 
     function log(msg) {
+      statusBox.textContent = msg;
       console.log(msg);
-      debug.textContent = msg;
     }
 
-    function sendHeading(heading, accuracy) {
-      window.parent.postMessage({
-        type: 'heading',
-        value: heading,
-        accuracy: accuracy ?? null,
-        timestamp: Date.now()
-      }, '*');
+    function sendHeading(heading) {
+      if (window.parent) {
+        window.parent.postMessage({ type: 'heading', value: heading }, '*');
+      }
     }
 
-    function handleOrientation(event) {
+    function handleOrientation(e) {
       let heading;
-      if (event.webkitCompassHeading !== undefined && event.webkitCompassAccuracy >= 0) {
-        heading = event.webkitCompassHeading;
-      } else if (typeof event.alpha === 'number') {
-        heading = (360 - event.alpha + 360) % 360;
+      if (e.webkitCompassHeading !== undefined && e.webkitCompassAccuracy >= 0) {
+        heading = e.webkitCompassHeading; // iOS compass
+      } else if (typeof e.alpha === 'number') {
+        heading = (360 - e.alpha) % 360; // Android-style compass
       }
-      if (heading == null || isNaN(heading)) return;
 
-      if (Math.abs(heading - (lastHeading ?? heading)) > 0.5) {
-        lastHeading = heading;
-        sendHeading(heading, event.webkitCompassAccuracy);
-        log(`🧭 Heading: ${heading.toFixed(1)}°`);
+      if (heading === undefined || isNaN(heading)) {
+        log('⚠️ No valid heading data');
+        return;
       }
+
+      sendHeading(heading);
+      log(`🧭 Heading: ${heading.toFixed(1)}°`);
     }
 
-    async function enableCompass() {
-      btn.disabled = true;
+    // ✅ Listen for orientation updates
+    window.addEventListener('deviceorientation', handleOrientation, true);
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
 
-      try {
-        if (typeof DeviceOrientationEvent === 'undefined') {
-          log('❌ DeviceOrientationEvent not supported.');
-          return;
-        }
-
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-          const res = await DeviceOrientationEvent.requestPermission();
-          if (res !== 'granted') {
-            log(`🚫 Permission denied: ${res}`);
-            return;
-          }
-        }
-
-        window.addEventListener('deviceorientation', handleOrientation, true);
-        window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-        log('✅ Compass enabled — waiting for movement...');
-      } catch (err) {
-        log('❌ Error enabling compass: ' + err.message);
-      }
-    }
-
-    btn.addEventListener('click', enableCompass);
+    log('✅ Compass bridge loaded — awaiting permission in parent.');
   </script>
 </body>
 </html>
